@@ -1,0 +1,60 @@
+{
+  "name": "@sleeperhq/rozenite-panel-kit",
+  "version": "1.1.0",
+  "description": "What Rozenite DevTools panels can share: an attach lease with the app, stores, a widget grid with saved layouts, file saving and formatting, and the app-side helpers to match.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blitzstudios/rozenite-plugins.git",
+    "directory": "packages/panel-kit"
+  },
+  "keywords": [
+    "rozenite",
+    "react-native",
+    "devtools"
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "metro",
+    "react-native.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@rozenite/agent-bridge": "*",
+    "@rozenite/plugin-bridge": "*",
+    "@rozenite/ui": "*",
+    "react": "*",
+    "react-dom": "*",
+    "react-grid-layout": "*"
+  },
+  "peerDependenciesMeta": {
+    "@rozenite/agent-bridge": {
+      "optional": true
+    },
+    "@rozenite/ui": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "react-grid-layout": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@rozenite/agent-bridge": "2.4.0",
+    "@rozenite/plugin-bridge": "2.4.0",
+    "@rozenite/ui": "2.4.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-grid-layout": "2.2.4",
+    "typescript": "5.8.3"
+  }
+}
