@@ -1,0 +1,180 @@
+#!/bin/bash
+# Calls Rozenite agent tools on the running app over Metro's HTTP API (milliseconds, unlike the
+# `npx rozenite` CLI's ~2 s Node start). Keeps one session per Metro port in /tmp.
+#
+#   rz tools [filter]                  # tool names and what each does
+#   rz describe input.tap              # a tool's description and arguments
+#   rz input.list-elements             # a plugin's tool, <plugin>.<tool>: RZ_PLUGIN_PREFIX + plugin
+#   rz input.tap-element '{"match":"LOG IN"}'
+#   rz @acme/rozenite-plugin-x.do-it   # a tool by its full name
+#   rz listRequests                    # Rozenite's built-in tools have no plugin
+#   rz reload                          # reload the app's JS and wait for the plugin tools
+#   rz restart                         # restart the app's JS and wait for it (needs RZ_RESTART_TOOL)
+#   rz wait                            # wait for the plugin tools to come back
+#
+# Without RZ_PORT it uses the first Metro with an app attached (8081 first, then any other local
+# Metro, such as a worktree's), and says so when that isn't 8081. RZ_PLUGIN_PREFIX defaults to
+# @sleeperhq/rozenite-plugin-. `restart` calls RZ_RESTART_TOOL, then waits for RZ_SESSION_TOOL's
+# `sessionId` to change: tools an app adds, since restarting is up to the app.
+set -euo pipefail
+
+prefix="${RZ_PLUGIN_PREFIX:-@sleeperhq/rozenite-plugin-}"
+
+die() { echo "$*" >&2; exit 1; }
+
+case "${1:-}" in
+  "" | -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+esac
+
+write_atomic() {
+  local tmp
+  tmp=$(mktemp "$1.XXXXXX")
+  cat > "$tmp"
+  mv -f "$tmp" "$1"
+}
+
+attached() { curl -sf -m 1 "http://localhost:$1/rozenite/agent/targets" 2> /dev/null | jq -e '.result.targets | length > 0' > /dev/null 2>&1; }
+
+find_port() {
+  local cached candidate
+  cached=$(cat /tmp/rz-port 2> /dev/null || true)
+  for candidate in 8081 $cached $(lsof -nP -iTCP -sTCP:LISTEN 2> /dev/null | awk '$1 == "node" { sub(/.*:/, "", $9); print $9 }' | sort -un); do
+    if attached "$candidate"; then
+      [[ "$candidate" == "$cached" ]] || echo "$candidate" | write_atomic /tmp/rz-port
+      [[ "$candidate" == 8081 ]] || echo "(using the app on Metro :$candidate; set RZ_PORT to pick another)" >&2
+      echo "$candidate"
+      return
+    fi
+  done
+  echo 8081
+}
+
+port="${RZ_PORT:-$(find_port)}"
+base="http://localhost:$port/rozenite/agent"
+session_file="/tmp/rz-session-$port"
+
+new_session() {
+  local target id
+  target=$(curl -sf "$base/targets" | jq -r '.result.targets[0].id // empty') || die "Metro isn't answering on :$port"
+  [[ -n "$target" ]] || die "No app is attached to Metro on :$port; ask for it to be launched"
+  id=$(curl -sf -X POST "$base/sessions" -H 'content-type: application/json' -d "{\"deviceId\":\"$target\"}" |
+    jq -r '.result.session.id // .result.id // empty') || die "Metro on :$port didn't open a session"
+  [[ -n "$id" ]] || die "Metro on :$port didn't open a session"
+  echo "$id" | write_atomic "$session_file"
+}
+
+session() {
+  if [[ ! -s "$session_file" ]]; then
+    new_session
+    # The app registers its plugin tools with a new session a moment after it opens; a call before then fails.
+    for _ in 1 2 3 4 5 6; do
+      curl -s "$base/sessions/$(cat "$session_file")/tools" | jq -e '(.result.tools // .result) | any(.[]; .name | startswith("@sleeperhq/rozenite-plugin-input."))' > /dev/null 2>&1 && break
+      sleep 0.5
+    done
+  fi
+  cat "$session_file"
+}
+
+post_tool() {
+  curl -s ${2:+-m "$2"} -X POST "$base/sessions/$(session)/call-tool" -H 'content-type: application/json' -d "$1"
+}
+
+tools_json() {
+  local body
+  session > /dev/null
+  body=$(curl -s "$base/sessions/$(session)/tools")
+  if [[ $(jq -r '.ok' <<< "$body") == false ]]; then new_session; body=$(curl -s "$base/sessions/$(session)/tools"); fi
+  [[ -n "$body" ]] || die "No reply from Metro on :$port"
+  jq '.result.tools // .result' <<< "$body"
+}
+
+qualify() {
+  if [[ "$1" == @* || "$1" != *.* ]]; then echo "$1"; else echo "$prefix$1"; fi
+}
+
+call() {
+  local name args body response
+  name=$(qualify "$1")
+  args="${2:-}"
+  [[ -n "$args" ]] || args='{}'
+  body=$(jq -nc --arg name "$name" --argjson args "$args" '{toolName: $name, args: $args}')
+  session > /dev/null
+  response=$(post_tool "$body")
+  if jq -e '.ok == false and (.error.message | test("session"; "i"))' <<< "$response" > /dev/null 2>&1; then
+    new_session
+    response=$(post_tool "$body")
+  fi
+  [[ -n "$response" ]] || die "No reply from the app on Metro :$port"
+  jq -e '.ok != false' <<< "$response" > /dev/null || die "error: $(jq -r '.error.message' <<< "$response")"
+  jq -r '
+    .result.result
+    | if type == "object" and (has("lines") or has("did") or has("element"))
+      then (.did // empty), (.lines // [] | .[]), (.element // empty),
+        (if .otherMatches then "(\(.otherMatches) other matches; pass index to pick one)" else empty end),
+        (if .settled == false then "(still changing after the settle wait)" else empty end)
+      else . end' <<< "$response"
+}
+
+# The app's own session id, which a restart replaces.
+app_session() {
+  post_tool "$(jq -nc --arg name "$(qualify "$RZ_SESSION_TOOL")" '{toolName: $name, args: {}}')" 2 | jq -r '.result.result.sessionId // empty'
+}
+
+wait_ready() {
+  local deadline=$((SECONDS + 30))
+  rm -f "$session_file"
+  while ((SECONDS < deadline)); do
+    # Tools are listed a moment before the app can answer them, and a call made then waits out Rozenite's 30 s.
+    if (new_session) 2> /dev/null && tools_json | jq -e 'any(.[]; .name | startswith("@sleeperhq/rozenite-plugin-input."))' > /dev/null 2>&1 \
+      && post_tool '{"toolName":"@sleeperhq/rozenite-plugin-input.playback-status","args":{}}' 3 | jq -e '.ok' > /dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.5
+  done
+  die "The app didn't come back with the plugin tools within 30 s; is it a dev build with the Input module?"
+}
+
+case "$1" in
+  tools)
+    tools_json | jq -r --arg filter "${2:-}" --arg prefix "$prefix" '.[] | select(.name | contains($filter)) | "\(.name | ltrimstr($prefix))  \(.description | split(". ")[0])"'
+    ;;
+  describe)
+    [[ -n "${2:-}" ]] || die "Usage: rz describe <tool>"
+    tools=$(tools_json)
+    jq -er --arg name "$(qualify "$2")" '.[] | select(.name == $name) | .description, .inputSchema' <<< "$tools" && exit 0
+    jq -e 'any(.[]; .name | startswith("@sleeperhq/rozenite-plugin-input."))' <<< "$tools" > /dev/null ||
+      die "No Input plugin tools on Metro :$port: is the app attached? (rz wait)"
+    die "No tool $2; rz tools lists them"
+    ;;
+  reload)
+    curl -sf -X POST "http://localhost:$port/reload" > /dev/null || die "Metro isn't answering on :$port"
+    sleep 1
+    wait_ready && echo "ready"
+    ;;
+  restart)
+    [[ -n "${RZ_RESTART_TOOL:-}" && -n "${RZ_SESSION_TOOL:-}" ]] ||
+      die "rz restart needs RZ_RESTART_TOOL (restarts the app's JS) and RZ_SESSION_TOOL (answers { sessionId })"
+    before=$(app_session) || true
+    if [[ -z "$before" ]]; then
+      # Without the app's current session id there's nothing to tell the restarted app from this one.
+      wait_ready
+      before=$(app_session) || true
+      [[ -n "$before" ]] || die "Can't read the app's session from $RZ_SESSION_TOOL"
+    fi
+    # The reply can be lost when the JS goes away; don't wait out Rozenite's 30 s for it.
+    post_tool "$(jq -nc --arg name "$(qualify "$RZ_RESTART_TOOL")" '{toolName: $name, args: {}}')" 3 > /dev/null || true
+    deadline=$((SECONDS + 30))
+    while ((SECONDS < deadline)); do
+      sleep 0.5
+      rm -f "$session_file"
+      now=$(app_session 2> /dev/null) || true
+      if [[ -n "$now" && "$now" != "$before" ]]; then
+        wait_ready && echo "ready"
+        exit 0
+      fi
+    done
+    die "The app didn't restart within 30 s"
+    ;;
+  wait) wait_ready && echo "ready" ;;
+  *) call "$1" "${2:-}" ;;
+esac
