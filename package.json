@@ -1,0 +1,75 @@
+{
+  "name": "@sleeperhq/rozenite-plugin-input",
+  "version": "1.0.1",
+  "description": "Drive a React Native app from DevTools or an AI agent: synthetic taps, swipes, long presses and typing, the elements on screen to aim them at with text snapshots and diffs, and touch recordings to replay.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/blitzstudios/rozenite-plugins.git",
+    "directory": "packages/plugin-input"
+  },
+  "keywords": [
+    "rozenite",
+    "rozenite-plugin",
+    "react-native",
+    "devtools",
+    "testing",
+    "agents"
+  ],
+  "main": "./dist/react-native/cjs/react-native.js",
+  "module": "./dist/react-native/react-native.js",
+  "types": "./dist/react-native/react-native.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/react-native/react-native.d.ts",
+      "import": "./dist/react-native/react-native.js",
+      "require": "./dist/react-native/cjs/react-native.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "ios",
+    "android",
+    "!android/build",
+    "RozenitePluginInput.podspec",
+    "skill",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rozenite build",
+    "dev": "rozenite dev",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest --run",
+    "prepublishOnly": "yarn build"
+  },
+  "dependencies": {
+    "@rozenite/agent-bridge": "2.4.0",
+    "@rozenite/plugin-bridge": "2.4.0",
+    "@sleeperhq/rozenite-panel-kit": "blitzstudios/rozenite-plugins.git#rozenite-panel-kit-v1.0.1-gitpkg"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.76"
+  },
+  "devDependencies": {
+    "@rozenite/ui": "2.4.0",
+    "@rozenite/vite-plugin": "2.4.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-grid-layout": "2.2.4",
+    "react-native": "0.85.2",
+    "react-native-web": "0.21.2",
+    "rozenite": "2.4.0",
+    "typescript": "5.8.3",
+    "vite": "7.3.6",
+    "vitest": "3.2.4"
+  },
+  "bin": {
+    "rz": "bin/rz",
+    "sim-screenshot": "bin/sim-screenshot"
+  }
+}
