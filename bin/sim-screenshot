@@ -1,0 +1,85 @@
+#!/bin/bash
+# A small screenshot of a simulator or emulator, for an agent to look at: downscaled, and optionally
+# cropped to one element's frame from list-elements (in points).
+#
+#   sim-screenshot                       # booted iOS simulator, 400 px wide
+#   sim-screenshot -c 24,221,354,38      # just that frame (left,top,w,h in points)
+#   sim-screenshot -a 201,240,354,38     # the same, from a list-elements line's @x,y WxH
+#   sim-screenshot --android -s 2.625    # Android: pass the scale from list-elements' header
+#
+# Options: -d <udid> (default: booted), --android [-e <serial>], -c l,t,w,h, -a x,y,w,h, -p <pt> padding (with -a), -s <scale>, -w <px> (0: full size), -o <file>
+set -euo pipefail
+
+device=booted
+android=false
+serial=""
+crop=""
+around=""
+padding=0
+scale=""
+width=400
+# A new name each time: an image viewer or agent reading a reused path can show the previous shot.
+out="/tmp/sim-screenshot-$(date +%H%M%S)-$$.png"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -d) device="${2:?-d needs a udid}"; shift 2 ;;
+    --android) android=true; shift ;;
+    -e) serial="${2:?-e needs a serial}"; shift 2 ;;
+    -c) crop="${2:?-c needs l,t,w,h}"; shift 2 ;;
+    -a) around="${2:?-a needs x,y,w,h}"; shift 2 ;;
+    -p) padding="${2:?-p needs points}"; shift 2 ;;
+    -s) scale="${2:?-s needs a scale}"; shift 2 ;;
+    -w) width="${2:?-w needs pixels}"; shift 2 ;;
+    -o) out="${2:?-o needs a file}"; shift 2 ;;
+    -h|--help) sed -n '2,10p' "$0"; exit 0 ;;
+    *) echo "Unknown option $1" >&2; exit 2 ;;
+  esac
+done
+
+workdir="$(mktemp -d)"
+raw="$workdir/shot.png"
+trap 'rm -rf "$workdir"' EXIT
+
+if [[ -n "$around" ]]; then
+  IFS=, read -r ax ay aw ah <<< "$around"
+  crop=$(awk -v x="$ax" -v y="$ay" -v w="$aw" -v h="$ah" -v p="$padding" 'BEGIN { l = x - w / 2 - p; t = y - h / 2 - p; printf "%g,%g,%g,%g", (l < 0 ? 0 : l), (t < 0 ? 0 : t), w + 2 * p, h + 2 * p }')
+fi
+
+if $android; then
+  if ! adb ${serial:+-s "$serial"} exec-out screencap -p > "$raw" || [[ ! -s "$raw" ]]; then
+    echo "adb couldn't take a screenshot: is exactly one emulator running (adb devices), or pass -e <serial>" >&2
+    exit 1
+  fi
+elif ! xcrun simctl io "$device" screenshot "$raw" > /dev/null 2>&1; then
+  if [[ "$device" == booted ]]; then echo "No booted iOS simulator to screenshot" >&2; else echo "Couldn't screenshot simulator $device: is it booted?" >&2; fi
+  exit 1
+fi
+
+pixel_width=$(sips -g pixelWidth "$raw" | awk '/pixelWidth/ {print $2}')
+pixel_height=$(sips -g pixelHeight "$raw" | awk '/pixelHeight/ {print $2}')
+
+if [[ -n "$crop" ]]; then
+  if [[ -z "$scale" ]]; then
+    if $android; then echo "Cropping an Android screenshot needs -s <scale> (list-elements' header has it)" >&2; exit 2; fi
+    # iPhones are 3x unless that makes the screen implausibly narrow (SE, iPads are 2x).
+    points=$(((pixel_width < pixel_height ? pixel_width : pixel_height) / 3))
+    if (( points >= 320 && points <= 450 )); then scale=3; else scale=2; fi
+  fi
+  IFS=, read -r x y w h <<< "$crop"
+  px() { awk -v v="$1" -v s="$scale" 'BEGIN { printf "%d", v * s + 0.5 }'; }
+  cx=$(px "$x"); cy=$(px "$y"); cw=$(px "$w"); ch=$(px "$h")
+  (( cx + cw > pixel_width )) && cw=$((pixel_width - cx))
+  (( cy + ch > pixel_height )) && ch=$((pixel_height - cy))
+  if (( cw <= 0 || ch <= 0 )); then echo "Crop $crop is outside the ${pixel_width}x${pixel_height} px screen (scale $scale)" >&2; exit 2; fi
+  sips -c "$ch" "$cw" --cropOffset "$cy" "$cx" "$raw" --out "$raw" > /dev/null
+fi
+
+current_width=$(sips -g pixelWidth "$raw" | awk '/pixelWidth/ {print $2}')
+if (( width > 0 && current_width > width )); then
+  sips --resampleWidth "$width" "$raw" --out "$out" > /dev/null
+else
+  cp "$raw" "$out"
+fi
+
+echo "$out $(sips -g pixelWidth -g pixelHeight "$out" | awk '/pixel/ {print $2}' | paste -sd x -)"
