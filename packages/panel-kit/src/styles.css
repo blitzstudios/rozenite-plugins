@@ -1,0 +1,163 @@
+@import '@rozenite/ui/styles.css';
+@import 'react-grid-layout/css/styles.css';
+
+@source "./";
+
+/* The sidebar every panel built on the kit shares. */
+
+.sk-panel {
+  --sk-bg-soft: #f6f7f9;
+  --sk-bg-hover: #eef1f5;
+  --sk-bg-active: #e3ebfb;
+  --sk-line: #e1e4e8;
+  --sk-text: #1f2328;
+  --sk-muted: #6a737d;
+  --sk-accent: #1a73e8;
+  --sk-good: #1e8e3e;
+  --sk-good-soft: rgba(30, 142, 62, 0.12);
+  --sk-bad: #d93025;
+  --sk-bad-soft: rgba(217, 48, 37, 0.1);
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dark .sk-panel {
+  --sk-bg-soft: #292a2d;
+  --sk-bg-hover: #303134;
+  --sk-bg-active: #2d3a4f;
+  --sk-line: #3c4043;
+  --sk-text: #e8eaed;
+  --sk-muted: #9aa0a6;
+  --sk-accent: #8ab4f8;
+  --sk-good: #81c995;
+  --sk-good-soft: rgba(129, 201, 149, 0.16);
+  --sk-bad: #f28b82;
+  --sk-bad-soft: rgba(242, 139, 130, 0.14);
+}
+
+.sk-sidebar {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--sk-line);
+  background: var(--sk-bg-soft);
+  color: var(--sk-text);
+  font: 12px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.sk-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 10px 12px 8px;
+}
+
+.sk-brand-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.sk-connection {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--sk-bg-hover);
+  color: var(--sk-muted);
+}
+
+.sk-connection-live {
+  background: var(--sk-good-soft);
+  color: var(--sk-good);
+}
+
+.sk-connection-recording {
+  background: var(--sk-bad-soft);
+  color: var(--sk-bad);
+}
+
+.sk-nav-heading {
+  padding: 10px 12px 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sk-muted);
+}
+
+.sk-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 12px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.sk-nav-item:hover {
+  background: var(--sk-bg-hover);
+}
+
+.sk-nav-item-active {
+  background: var(--sk-bg-active);
+}
+
+.sk-nav-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sk-nav-meta {
+  color: var(--sk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sk-sidebar-resizer {
+  flex-shrink: 0;
+  width: 6px;
+  margin: 0 -3px;
+  position: relative;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sk-sidebar-resizer:hover,
+.sk-sidebar-resizer:active {
+  background: linear-gradient(to right, transparent 2px, var(--sk-accent) 2px, var(--sk-accent) 4px, transparent 4px);
+}
+
+.sk-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sk-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--sk-line);
+}
+
+.sk-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}

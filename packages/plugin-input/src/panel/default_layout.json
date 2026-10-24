@@ -1,0 +1,51 @@
+{
+  "favorites": [],
+  "tabs": {
+    "screen": [
+      {
+        "i": "screen.map",
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 12
+      },
+      {
+        "i": "screen.elements",
+        "x": 4,
+        "y": 0,
+        "w": 5,
+        "h": 8
+      },
+      {
+        "i": "screen.manual",
+        "x": 9,
+        "y": 0,
+        "w": 3,
+        "h": 8
+      },
+      {
+        "i": "screen.log",
+        "x": 4,
+        "y": 8,
+        "w": 8,
+        "h": 4
+      }
+    ],
+    "recordings": [
+      {
+        "i": "recordings.list",
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 12
+      },
+      {
+        "i": "recordings.log",
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 12
+      }
+    ]
+  }
+}

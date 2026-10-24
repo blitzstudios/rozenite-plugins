@@ -1,0 +1,8 @@
+node_modules/
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+.DS_Store
+*.log
+dist/
+.rozenite/
