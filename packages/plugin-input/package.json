@@ -1,6 +1,6 @@
 {
   "name": "@sleeperhq/rozenite-plugin-input",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Drive a React Native app from DevTools or an AI agent: synthetic taps, swipes, long presses and typing, the elements on screen to aim them at with text snapshots and diffs, and touch recordings to replay.",
   "license": "MIT",
   "repository": {
