@@ -25,11 +25,22 @@ type ControlBase = {
 
 export type FlagControl = ControlBase & { kind: 'flag'; state: FlagState; resolved: boolean };
 export type ToggleControl = ControlBase & { kind: 'toggle'; value: boolean };
+/** An icon in a card's corner, such as a build's progress, with what it means: shown on hover or tap. */
+export type ChoiceIndicator = { kind: 'progress' | 'success' | 'error' | 'warning' | 'neutral'; title: string; text: string };
 /**
  * `confirm` is asked before picking this option, for one that quits the app or loses data. `footer` is a card's bottom
- * line. `disabledReason` shows the option, struck through, without letting it be picked, and says why.
+ * line, and `indicators` its corner icons. `disabledReason` shows the option struck through without letting it be
+ * picked; a card explains why with its indicators, and a menu or an agent tool with the reason.
  */
-export type ChoiceOption = { value: string; label: string; description?: string; footer?: string; confirm?: string; disabledReason?: string };
+export type ChoiceOption = {
+  value: string;
+  label: string;
+  description?: string;
+  footer?: string;
+  confirm?: string;
+  disabledReason?: string;
+  indicators?: ChoiceIndicator[];
+};
 /**
  * One of `options`; with `defaultLabel`, `null` means "no override", shown with what the app would pick. A short list shows
  * every option at once and a long one opens a menu; `display: 'menu'` always opens a menu. `display: 'cards'` draws each

@@ -18,7 +18,7 @@ import {
 } from '@rozenite/ui';
 import { useStore } from '../store';
 import { useSavedFieldHeight } from '../widgets';
-import { confirmationFor, isToolbarAction, type ChoiceControl, type Control, type ControlValue, type FlagControl, type FlagState, type FormControl, type InfoControl, type JsonControl, type TextControl } from './protocol';
+import { confirmationFor, isToolbarAction, type ChoiceControl, type ChoiceIndicator, type Control, type ControlValue, type FlagControl, type FlagState, type FormControl, type InfoControl, type JsonControl, type TextControl } from './protocol';
 import { useControls } from './context';
 import { overridesIn } from './overrides';
 
@@ -276,7 +276,34 @@ function FormRow({ control, onApply }: { control: FormControl; onApply: Apply })
   );
 }
 
-/** Each option as a card with its description and footer. A disabled option is struck through, with its reason. */
+const INDICATOR_GLYPHS: Record<ChoiceIndicator['kind'], { glyph: string; color: string }> = {
+  progress: { glyph: '⏳', color: 'inherit' },
+  success: { glyph: '✓', color: '#22c55e' },
+  error: { glyph: '✕', color: '#ef4444' },
+  warning: { glyph: '⚠', color: '#f59e0b' },
+  neutral: { glyph: '⊘', color: '#9ca3af' },
+};
+
+/** A card's corner icons, each explained on hover. */
+function Indicators({ indicators }: { indicators: ChoiceIndicator[] }) {
+  return (
+    <span className="absolute right-2 top-2 flex gap-1 text-xs">
+      {indicators.map((indicator) => (
+        <span
+          key={`${indicator.kind}:${indicator.title}`}
+          role="img"
+          aria-label={`${indicator.title}: ${indicator.text}`}
+          title={`${indicator.title}: ${indicator.text}`}
+          style={{ color: INDICATOR_GLYPHS[indicator.kind].color }}
+        >
+          {INDICATOR_GLYPHS[indicator.kind].glyph}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Each option as a card with its description, footer and corner icons. A disabled option is struck through. */
 function ChoiceCards({ control, onApply }: { control: ChoiceControl; onApply: (value: ControlValue) => void }) {
   return (
     <Row gap={2} className="overflow-x-auto pb-1">
@@ -289,19 +316,19 @@ function ChoiceCards({ control, onApply }: { control: ChoiceControl; onApply: (v
             key={option.value}
             type="button"
             disabled={!!control.disabledReason || !!option.disabledReason}
-            title={option.disabledReason}
             onClick={() => !selected && onApply(option.value)}
-            className={`flex h-36 w-40 shrink-0 flex-col items-start gap-1 rounded-lg border p-3 text-left disabled:opacity-60 ${border}`}
+            className={`relative flex h-36 w-40 shrink-0 flex-col items-start gap-1 rounded-lg border p-3 text-left disabled:opacity-60 ${border}`}
           >
-            <Text className={`font-semibold ${struck}`}>{option.label}</Text>
+            {!!option.indicators?.length && <Indicators indicators={option.indicators} />}
+            <Text className={`pr-10 font-semibold ${struck}`}>{option.label}</Text>
             {option.description && (
               <Text variant="caption" tone="neutral" className={`line-clamp-4 ${struck}`}>
                 {option.description}
               </Text>
             )}
-            {(option.footer || option.disabledReason) && (
+            {option.footer && (
               <Text variant="caption" tone="neutral" className="mt-auto whitespace-pre-line text-[10px]">
-                {[option.disabledReason, option.footer].filter(Boolean).join('\n')}
+                {option.footer}
               </Text>
             )}
           </button>
