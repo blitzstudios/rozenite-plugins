@@ -101,7 +101,7 @@ function ChoiceInput({ control, onApply }: { control: ChoiceControl; onApply: (v
       >
         {control.defaultLabel && <option value={DEFAULT_CHOICE}>{control.defaultLabel}</option>}
         {control.options.map((option) => (
-          <option key={option.value} value={option.value}>
+          <option key={option.value} value={option.value} disabled={!!option.disabledReason} title={option.disabledReason}>
             {option.label}
           </option>
         ))}
@@ -276,30 +276,32 @@ function FormRow({ control, onApply }: { control: FormControl; onApply: Apply })
   );
 }
 
-/** Each option as a card with its description and footer. */
+/** Each option as a card with its description and footer. A disabled option is struck through, with its reason. */
 function ChoiceCards({ control, onApply }: { control: ChoiceControl; onApply: (value: ControlValue) => void }) {
   return (
     <Row gap={2} className="overflow-x-auto pb-1">
       {control.options.map((option) => {
         const selected = option.value === control.value;
         const border = selected ? (control.failed ? 'border-red-500 bg-red-500/15' : 'border-emerald-400 bg-emerald-400/15') : 'border-border';
+        const struck = option.disabledReason ? 'line-through' : '';
         return (
           <button
             key={option.value}
             type="button"
-            disabled={!!control.disabledReason}
+            disabled={!!control.disabledReason || !!option.disabledReason}
+            title={option.disabledReason}
             onClick={() => !selected && onApply(option.value)}
-            className={`flex h-36 w-40 shrink-0 flex-col items-start gap-1 rounded-lg border p-3 text-left disabled:opacity-40 ${border}`}
+            className={`flex h-36 w-40 shrink-0 flex-col items-start gap-1 rounded-lg border p-3 text-left disabled:opacity-60 ${border}`}
           >
-            <Text className="font-semibold">{option.label}</Text>
+            <Text className={`font-semibold ${struck}`}>{option.label}</Text>
             {option.description && (
-              <Text variant="caption" tone="neutral" className="line-clamp-4">
+              <Text variant="caption" tone="neutral" className={`line-clamp-4 ${struck}`}>
                 {option.description}
               </Text>
             )}
-            {option.footer && (
+            {(option.footer || option.disabledReason) && (
               <Text variant="caption" tone="neutral" className="mt-auto whitespace-pre-line text-[10px]">
-                {option.footer}
+                {[option.disabledReason, option.footer].filter(Boolean).join('\n')}
               </Text>
             )}
           </button>

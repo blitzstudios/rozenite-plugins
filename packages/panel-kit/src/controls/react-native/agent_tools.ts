@@ -16,7 +16,7 @@ const matches = (query: string | undefined, ...fields: (string | undefined)[]) =
 const describeControl = (control: Control) => {
   if (control.kind === 'flag') return 'value: "default" | "on" | "off"';
   if (control.kind === 'toggle') return 'value: true | false';
-  if (control.kind === 'choice') return `value: one of the option values${control.defaultLabel ? ', or null for no override' : ''}`;
+  if (control.kind === 'choice') return `value: one of the option values without a disabledReason${control.defaultLabel ? ', or null for no override' : ''}`;
   if (control.kind === 'text') return 'value: a string';
   if (control.kind === 'json') return control.editable ? 'value: JSON text to override, or null to clear the override' : 'read only';
   if (control.kind === 'action') return 'value: null (runs the action)';
@@ -48,7 +48,7 @@ export function controlsAgentTools(ops: ControlOperations, { subject = "the app'
       tool: {
         name: 'get-section',
         description:
-          `One section of ${subject} with every control and its current value: flags (state default/on/off, and what the rollout resolved to), toggles, choices with their options, text, actions, forms, info and JSON. A control with disabledReason cannot be applied; one with confirm (or a choice option with confirm) restarts the app, quits it or loses data.`,
+          `One section of ${subject} with every control and its current value: flags (state default/on/off, and what the rollout resolved to), toggles, choices with their options, text, actions, forms, info and JSON. A control or a choice option with disabledReason cannot be applied; one with confirm (or a choice option with confirm) restarts the app, quits it or loses data.`,
         inputSchema: { type: 'object', properties: { sectionId: { type: 'string' } }, required: ['sectionId'] },
         readOnly: true,
         idempotent: true,
@@ -123,6 +123,8 @@ export function controlsAgentTools(ops: ControlOperations, { subject = "the app'
         if (!control) throw new Error(`No control ${controlId} in ${sectionId}`);
         if (control.disabledReason) throw new Error(`${control.label} is disabled: ${control.disabledReason}`);
         const value = (args.value ?? null) as ControlValue;
+        const option = control.kind === 'choice' ? control.options.find((candidate) => candidate.value === value) : undefined;
+        if (option?.disabledReason) throw new Error(`${option.label} can't be picked: ${option.disabledReason}`);
         const confirmation = confirmationFor(control, value);
         if (confirmation && !bool(args.confirmed)) throw new Error(`${control.label} needs confirmed: true. ${confirmation}`);
         const result = await ops.apply(sectionId, controlId, value);

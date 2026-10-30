@@ -1,6 +1,6 @@
 {
   "name": "@sleeperhq/rozenite-panel-kit",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "What Rozenite DevTools panels can share: an attach lease with the app, stores, a widget grid with saved layouts, file saving and formatting, and the app-side helpers to match.",
   "license": "MIT",
   "repository": {

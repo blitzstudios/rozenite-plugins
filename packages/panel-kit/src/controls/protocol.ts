@@ -25,8 +25,11 @@ type ControlBase = {
 
 export type FlagControl = ControlBase & { kind: 'flag'; state: FlagState; resolved: boolean };
 export type ToggleControl = ControlBase & { kind: 'toggle'; value: boolean };
-/** `confirm` is asked before picking this option, for one that quits the app or loses data. `footer` is a card's bottom line. */
-export type ChoiceOption = { value: string; label: string; description?: string; footer?: string; confirm?: string };
+/**
+ * `confirm` is asked before picking this option, for one that quits the app or loses data. `footer` is a card's bottom
+ * line. `disabledReason` shows the option, struck through, without letting it be picked, and says why.
+ */
+export type ChoiceOption = { value: string; label: string; description?: string; footer?: string; confirm?: string; disabledReason?: string };
 /**
  * One of `options`; with `defaultLabel`, `null` means "no override", shown with what the app would pick. A short list shows
  * every option at once and a long one opens a menu; `display: 'menu'` always opens a menu. `display: 'cards'` draws each
