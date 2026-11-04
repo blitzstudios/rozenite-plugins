@@ -284,21 +284,28 @@ const INDICATOR_GLYPHS: Record<ChoiceIndicator['kind'], { glyph: string; color: 
   neutral: { glyph: '⊘', color: '#9ca3af' },
 };
 
-/** A card's corner icons, each explained on hover. */
+/** A card's corner icons, each explained on hover. One with a url opens it. They sit beside the card's button, which can't hold a link. */
 function Indicators({ indicators }: { indicators: ChoiceIndicator[] }) {
   return (
     <span className="absolute right-2 top-2 flex gap-1 text-xs">
-      {indicators.map((indicator) => (
-        <span
-          key={`${indicator.kind}:${indicator.title}`}
-          role="img"
-          aria-label={`${indicator.title}: ${indicator.text}`}
-          title={`${indicator.title}: ${indicator.text}`}
-          style={{ color: INDICATOR_GLYPHS[indicator.kind].color }}
-        >
-          {INDICATOR_GLYPHS[indicator.kind].glyph}
-        </span>
-      ))}
+      {indicators.map((indicator) => {
+        const key = `${indicator.kind}:${indicator.title}`;
+        const props = {
+          'aria-label': `${indicator.title}: ${indicator.text}`,
+          title: `${indicator.title}: ${indicator.text}`,
+          style: { color: INDICATOR_GLYPHS[indicator.kind].color },
+        };
+        const glyph = INDICATOR_GLYPHS[indicator.kind].glyph;
+        return indicator.url ? (
+          <a key={key} {...props} href={indicator.url} target="_blank" rel="noreferrer" className="hover:opacity-70">
+            {glyph}
+          </a>
+        ) : (
+          <span key={key} {...props} role="img">
+            {glyph}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -312,26 +319,27 @@ function ChoiceCards({ control, onApply }: { control: ChoiceControl; onApply: (v
         const border = selected ? (control.failed ? 'border-red-500 bg-red-500/15' : 'border-emerald-400 bg-emerald-400/15') : 'border-border';
         const struck = option.disabledReason ? 'line-through' : '';
         return (
-          <button
-            key={option.value}
-            type="button"
-            disabled={!!control.disabledReason || !!option.disabledReason}
-            onClick={() => !selected && onApply(option.value)}
-            className={`relative flex h-36 w-40 shrink-0 flex-col items-start gap-1 rounded-lg border p-3 text-left disabled:opacity-60 ${border}`}
-          >
+          <div key={option.value} className="relative shrink-0">
+            <button
+              type="button"
+              disabled={!!control.disabledReason || !!option.disabledReason}
+              onClick={() => !selected && onApply(option.value)}
+              className={`flex h-36 w-40 flex-col items-start gap-1 rounded-lg border p-3 text-left disabled:opacity-60 ${border}`}
+            >
+              <Text className={`pr-10 font-semibold ${struck}`}>{option.label}</Text>
+              {option.description && (
+                <Text variant="caption" tone="neutral" className={`line-clamp-4 ${struck}`}>
+                  {option.description}
+                </Text>
+              )}
+              {option.footer && (
+                <Text variant="caption" tone="neutral" className="mt-auto whitespace-pre-line text-[10px]">
+                  {option.footer}
+                </Text>
+              )}
+            </button>
             {!!option.indicators?.length && <Indicators indicators={option.indicators} />}
-            <Text className={`pr-10 font-semibold ${struck}`}>{option.label}</Text>
-            {option.description && (
-              <Text variant="caption" tone="neutral" className={`line-clamp-4 ${struck}`}>
-                {option.description}
-              </Text>
-            )}
-            {option.footer && (
-              <Text variant="caption" tone="neutral" className="mt-auto whitespace-pre-line text-[10px]">
-                {option.footer}
-              </Text>
-            )}
-          </button>
+          </div>
         );
       })}
     </Row>

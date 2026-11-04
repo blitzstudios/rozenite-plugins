@@ -25,8 +25,11 @@ type ControlBase = {
 
 export type FlagControl = ControlBase & { kind: 'flag'; state: FlagState; resolved: boolean };
 export type ToggleControl = ControlBase & { kind: 'toggle'; value: boolean };
-/** An icon in a card's corner, such as a build's progress, with what it means: shown on hover or tap. */
-export type ChoiceIndicator = { kind: 'progress' | 'success' | 'error' | 'warning' | 'neutral'; title: string; text: string };
+/**
+ * An icon in a card's corner, such as a build's progress, with what it means: shown on hover or tap. With `url`, the
+ * icon opens it without picking the card, such as the build's page.
+ */
+export type ChoiceIndicator = { kind: 'progress' | 'success' | 'error' | 'warning' | 'neutral'; title: string; text: string; url?: string };
 /**
  * `confirm` is asked before picking this option, for one that quits the app or loses data. `footer` is a card's bottom
  * line, and `indicators` its corner icons. `disabledReason` shows the option struck through without letting it be
