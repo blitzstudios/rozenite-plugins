@@ -11,9 +11,12 @@
 #   rz reload                          # reload the app's JS and wait for the plugin tools
 #   rz restart                         # restart the app's JS and wait for it (needs RZ_RESTART_TOOL)
 #   rz wait                            # wait for the plugin tools to come back
+#   rz devices                         # the apps attached to Metro
+#   RZ_DEVICE=android rz …             # one of several: by name, app id or target id; android, ios
 #
 # Without RZ_PORT it uses the first Metro with an app attached (8081 first, then any other local
-# Metro, such as a worktree's), and says so when that isn't 8081. RZ_PLUGIN_PREFIX defaults to
+# Metro, such as a worktree's), and says so when that isn't 8081. With several apps attached and no
+# RZ_DEVICE it uses the first, and says which. RZ_PLUGIN_PREFIX defaults to
 # @sleeperhq/rozenite-plugin-. `restart` calls RZ_RESTART_TOOL, then waits for RZ_SESSION_TOOL's
 # `sessionId` to change: tools an app adds, since restarting is up to the app.
 set -euo pipefail
@@ -23,7 +26,7 @@ prefix="${RZ_PLUGIN_PREFIX:-@sleeperhq/rozenite-plugin-}"
 die() { echo "$*" >&2; exit 1; }
 
 case "${1:-}" in
-  "" | -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
+  "" | -h | --help) sed -n '2,19p' "$0"; exit 0 ;;
 esac
 
 write_atomic() {
@@ -51,12 +54,35 @@ find_port() {
 
 port="${RZ_PORT:-$(find_port)}"
 base="http://localhost:$port/rozenite/agent"
-session_file="/tmp/rz-session-$port"
+device="${RZ_DEVICE:-}"
+session_file="/tmp/rz-session-$port${device:+-$(tr -c 'A-Za-z0-9' '_' <<< "$device")}"
+
+# Targets as `id<TAB>name<TAB>app id<TAB>platform`; an Android device's name ends "API <level>".
+targets() {
+  curl -sf "$base/targets" | jq -r '.result.targets[] | [.id, .name, (.appId // ""),
+    (if (.name | test("API [0-9]+$")) then "android" else "ios" end)] | @tsv'
+}
+
+pick_target() {
+  local all
+  all=$(targets) || die "Metro isn't answering on :$port"
+  [[ -n "$all" ]] || die "No app is attached to Metro on :$port; ask for it to be launched"
+  if [[ -n "$device" ]]; then
+    local wanted
+    wanted=$(tr '[:upper:]' '[:lower:]' <<< "$device")
+    awk -F '\t' -v wanted="$wanted" '{ line = tolower($0); if ($4 == wanted || index(line, wanted)) { print $1; exit } }' <<< "$all" |
+      grep . || die "No attached app matches RZ_DEVICE=$device; rz devices lists them"
+    return
+  fi
+  if (($(wc -l <<< "$all") > 1)); then
+    echo "(several apps attached; using $(head -1 <<< "$all" | cut -f2). Set RZ_DEVICE to pick another: rz devices)" >&2
+  fi
+  head -1 <<< "$all" | cut -f1
+}
 
 new_session() {
   local target id
-  target=$(curl -sf "$base/targets" | jq -r '.result.targets[0].id // empty') || die "Metro isn't answering on :$port"
-  [[ -n "$target" ]] || die "No app is attached to Metro on :$port; ask for it to be launched"
+  target=$(pick_target) || exit 1
   id=$(curl -sf -X POST "$base/sessions" -H 'content-type: application/json' -d "{\"deviceId\":\"$target\"}" |
     jq -r '.result.session.id // .result.id // empty') || die "Metro on :$port didn't open a session"
   [[ -n "$id" ]] || die "Metro on :$port didn't open a session"
@@ -176,5 +202,6 @@ case "$1" in
     die "The app didn't restart within 30 s"
     ;;
   wait) wait_ready && echo "ready" ;;
+  devices) targets | awk -F '\t' '{ printf "%-8s %-40s %s\n", $4, $2, $3 }' ;;
   *) call "$1" "${2:-}" ;;
 esac

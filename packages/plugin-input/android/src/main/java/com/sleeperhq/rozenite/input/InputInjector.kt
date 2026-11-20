@@ -1,10 +1,13 @@
 package com.sleeperhq.rozenite.input
 
 import android.app.Instrumentation
+import android.content.Context
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.text.Spanned
 import android.text.TextPaint
@@ -14,8 +17,11 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.webkit.WebView
 import android.widget.EditText
 import android.widget.TextView
 import com.facebook.react.bridge.Arguments
@@ -28,6 +34,7 @@ import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.uimanager.BackgroundStyleApplicator
 import com.facebook.react.uimanager.style.LogicalEdge
+import org.json.JSONObject
 import java.lang.reflect.Method
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -100,32 +107,64 @@ class InputInjector(
         event.source = InputDevice.SOURCE_TOUCHSCREEN
         try {
             instrumentation.sendPointerSync(event)
-        } catch (e: SecurityException) {
-            throw IllegalStateException("The touch lands on a window the app doesn't own, such as the keyboard")
         } catch (e: Exception) {
-            dispatchToActivity(event)
+            // Android refuses an app's injection whenever a window it doesn't own is in the way, which some OEMs'
+            // always-on overlays are even over the app's own content, so the touch goes to the app's windows directly.
+            dispatchToOwnWindow(event)
         } finally {
             event.recycle()
         }
     }
 
-    // Reaches the activity window only, not dialogs.
-    private fun dispatchToActivity(event: MotionEvent) {
-        val decor = reactContext.currentActivity?.window?.decorView ?: throw IllegalStateException("No activity")
-        val location = IntArray(2)
+    // The window a gesture started on, which gets the rest of it. Read and written on the UI thread.
+    private var gestureRoot: View? = null
+
+    // Reaches the app's own windows, dialogs and popups included, but not the keyboard or the system's.
+    private fun dispatchToOwnWindow(event: MotionEvent) {
         val latch = CountDownLatch(1)
+        var failure: Exception? = null
         UiThreadUtil.runOnUiThread {
             try {
-                decor.getLocationOnScreen(location)
+                val action = event.actionMasked
+                if (action == MotionEvent.ACTION_DOWN) {
+                    val root = rootAt(event.rawX, event.rawY) ?: throw IllegalStateException("No window of the app is under the touch")
+                    if (isOverKeyboard(root, event.rawY)) {
+                        throw IllegalStateException("The touch lands on a window the app doesn't own, such as the keyboard")
+                    }
+                    gestureRoot = root
+                }
+                val root = gestureRoot ?: throw IllegalStateException("No window of the app is under the touch")
+                val location = IntArray(2)
+                root.getLocationOnScreen(location)
                 val local = MotionEvent.obtain(event)
                 local.offsetLocation(-location[0].toFloat(), -location[1].toFloat())
-                decor.dispatchTouchEvent(local)
+                root.dispatchTouchEvent(local)
                 local.recycle()
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) gestureRoot = null
+            } catch (e: Exception) {
+                failure = e
             } finally {
                 latch.countDown()
             }
         }
         latch.await()
+        failure?.let { throw it }
+    }
+
+    // Roots are listed in the order their windows were added, so the last one under the point is on top.
+    private fun rootAt(x: Float, y: Float): View? = rootViews().lastOrNull { root ->
+        val location = IntArray(2)
+        root.getLocationOnScreen(location)
+        x >= location[0] && x < location[0] + root.width && y >= location[1] && y < location[1] + root.height
+    }
+
+    private fun isOverKeyboard(root: View, y: Float): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+        val keyboard = root.rootWindowInsets?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
+        if (keyboard <= 0) return false
+        val location = IntArray(2)
+        root.getLocationOnScreen(location)
+        return y >= location[1] + root.height - keyboard
     }
 
     private fun contentView(): View? = reactContext.currentActivity?.findViewById(android.R.id.content)
@@ -233,6 +272,7 @@ class InputInjector(
                 val views = Arguments.createArray()
                 var elementCount = 0
                 var viewCount = 0
+                val webViews = mutableListOf<Pair<WebView, Int>>()
                 rootViews().forEachIndexed { index, root ->
                     val rootOffset = IntArray(2)
                     root.getLocationOnScreen(rootOffset)
@@ -240,21 +280,106 @@ class InputInjector(
                     rootOffset[1] -= origin[1]
                     elementCount += collectElements(root, index, origin, rootOffset, elements, MAX_ELEMENTS - elementCount)
                     if (withViews) viewCount += collectViews(root, index, origin, rootOffset, views, MAX_VIEWS - viewCount, 1f, null)
+                    findWebViews(root, index, webViews)
                 }
-                val metrics = reactContext.resources.displayMetrics
-                val result = Arguments.createMap()
-                result.putArray("elements", elements)
-                result.putBoolean("truncated", elementCount >= MAX_ELEMENTS)
-                result.putMap("screen", rect(0, 0, content?.width ?: metrics.widthPixels, content?.height ?: metrics.heightPixels))
-                if (withViews) {
-                    result.putArray("views", views)
-                    result.putBoolean("viewsTruncated", viewCount >= MAX_VIEWS)
+                addWebElements(webViews, origin, elements, MAX_ELEMENTS - elementCount) { webCount ->
+                    elementCount += webCount
+                    val metrics = reactContext.resources.displayMetrics
+                    val result = Arguments.createMap()
+                    result.putArray("elements", elements)
+                    result.putBoolean("truncated", elementCount >= MAX_ELEMENTS)
+                    result.putMap("screen", rect(0, 0, content?.width ?: metrics.widthPixels, content?.height ?: metrics.heightPixels))
+                    if (withViews) {
+                        result.putArray("views", views)
+                        result.putBoolean("viewsTruncated", viewCount >= MAX_VIEWS)
+                    }
+                    promise.resolve(result)
                 }
-                promise.resolve(result)
             } catch (e: Exception) {
                 promise.reject("ERR_ELEMENTS", e.message, e)
             }
         }
+    }
+
+    private fun findWebViews(view: View, window: Int, into: MutableList<Pair<WebView, Int>>) {
+        if (!view.isShown) return
+        if (view is WebView) {
+            into.add(view to window)
+        } else if (view is ViewGroup) {
+            for (i in 0 until view.childCount) findWebViews(view.getChildAt(i), window, into)
+        }
+    }
+
+    /**
+     * Reads each web view's page and adds its elements, then calls `done` with how many, on the UI thread. A page that
+     * doesn't answer in time is left out rather than holding up the snapshot.
+     */
+    private fun addWebElements(webViews: List<Pair<WebView, Int>>, origin: IntArray, into: WritableArray, budget: Int, done: (Int) -> Unit) {
+        if (webViews.isEmpty() || budget <= 0) {
+            done(0)
+            return
+        }
+        var pending = webViews.size
+        var added = 0
+        var finished = false
+        val finish = {
+            if (!finished) {
+                finished = true
+                done(added)
+            }
+        }
+        Handler(Looper.getMainLooper()).postDelayed({ finish() }, WEB_SNAPSHOT_TIMEOUT_MS)
+        webViews.forEach { (webView, window) ->
+            webView.evaluateJavascript(WebContent.SNAPSHOT) { json ->
+                if (finished) return@evaluateJavascript
+                try {
+                    added += pushWebElements(webView, window, origin, json, into, budget - added)
+                } catch (_: Exception) {
+                }
+                pending -= 1
+                if (pending == 0) finish()
+            }
+        }
+    }
+
+    /** Converts the page's CSS-px rects to screen points, clipped to the web view, and adds them as elements. */
+    private fun pushWebElements(webView: WebView, window: Int, origin: IntArray, json: String?, into: WritableArray, budget: Int): Int {
+        if (json.isNullOrEmpty() || json == "null") return 0
+        val page = JSONObject(json)
+        val scale = page.optDouble("dpr", 1.0) * page.optDouble("vs", 1.0)
+        val viewportX = page.optDouble("vx", 0.0)
+        val viewportY = page.optDouble("vy", 0.0)
+        val location = IntArray(2)
+        webView.getLocationOnScreen(location)
+        val bounds = Rect(location[0], location[1], location[0] + webView.width, location[1] + webView.height)
+        val items = page.optJSONArray("elements") ?: return 0
+        var added = 0
+        for (i in 0 until items.length()) {
+            if (added >= budget) break
+            val item = items.getJSONObject(i)
+            val left = location[0] + ((item.getDouble("x") - viewportX) * scale).roundToInt()
+            val top = location[1] + ((item.getDouble("y") - viewportY) * scale).roundToInt()
+            val frame = Rect(left, top, left + (item.getDouble("w") * scale).roundToInt(), top + (item.getDouble("h") * scale).roundToInt())
+            val visible = Rect(frame)
+            if (!visible.intersect(bounds)) continue
+            val element = Arguments.createMap()
+            element.putMap("frame", rect(frame.left - origin[0], frame.top - origin[1], frame.width(), frame.height()))
+            val center = Arguments.createMap()
+            center.putDouble("x", ((visible.exactCenterX() - origin[0]) / density).roundToInt().toDouble())
+            center.putDouble("y", ((visible.exactCenterY() - origin[1]) / density).roundToInt().toDouble())
+            element.putMap("center", center)
+            val traits = Arguments.createArray()
+            item.optJSONArray("traits")?.let { list -> for (t in 0 until list.length()) traits.pushString(list.getString(t)) }
+            element.putArray("traits", traits)
+            element.putInt("window", window)
+            element.putString("type", item.optString("type", "web"))
+            item.optString("id").takeIf { it.isNotEmpty() }?.let { element.putString("testID", it) }
+            item.optString("label").takeIf { it.isNotEmpty() }?.let { element.putString("label", it) }
+            item.optString("value").takeIf { it.isNotEmpty() }?.let { element.putString("value", it) }
+            into.pushMap(element)
+            added += 1
+        }
+        return added
     }
 
     /**
@@ -413,12 +538,24 @@ class InputInjector(
         return map
     }
 
-    /** Runs `edit` on the focused text field, or rejects with why there isn't one. */
-    private fun withFocusedField(promise: Promise, edit: (EditText) -> Unit) {
+    /** Runs `edit` on the focused text field, or `webScript` in a focused web view's page, or rejects with why neither. */
+    private fun withFocusedField(promise: Promise, webScript: String, edit: (EditText) -> Unit) {
         UiThreadUtil.runOnUiThread {
             val focused = rootViews().asReversed().firstNotNullOfOrNull { it.findFocus() }
             when (focused) {
                 null -> promise.reject("ERR_NO_FOCUS", "No text field is focused; tap one first")
+                is WebView -> focused.evaluateJavascript(webScript) { answer ->
+                    val outcome = answer?.trim('"') ?: ""
+                    when {
+                        outcome.startsWith("ok") -> {
+                            val result = Arguments.createMap()
+                            result.putString("view", "web:" + outcome.removePrefix("ok:").lowercase())
+                            promise.resolve(result)
+                        }
+                        outcome == "cross-origin" -> promise.reject("ERR_NO_FOCUS", "The focused field is in a frame from another site, which the page can't reach")
+                        else -> promise.reject("ERR_NO_FOCUS", "No field in the web page is focused; tap one first")
+                    }
+                }
                 !is EditText -> promise.reject("ERR_NOT_TEXT", "Focused view ${focused.javaClass.simpleName} does not take text")
                 else -> try {
                     edit(focused)
@@ -435,7 +572,7 @@ class InputInjector(
     /** "\n" in a single-line field is the return key: it runs the field's keyboard action, as the keyboard's does. */
     @ReactMethod
     fun typeText(text: String, promise: Promise) {
-        withFocusedField(promise) { field ->
+        withFocusedField(promise, WebContent.type(text)) { field ->
             if (text == "\n" && field.maxLines <= 1) {
                 field.onEditorAction(field.imeOptions and EditorInfo.IME_MASK_ACTION)
             } else {
@@ -449,7 +586,7 @@ class InputInjector(
     /** The keyboard's delete key, `count` times: a selection goes first, then the characters before the cursor. */
     @ReactMethod
     fun deleteBackward(count: Double, promise: Promise) {
-        withFocusedField(promise) { field ->
+        withFocusedField(promise, WebContent.delete(max(1, count.toInt()))) { field ->
             var remaining = max(1, count.toInt())
             val start = max(0, minOf(field.selectionStart, field.selectionEnd))
             val end = max(0, maxOf(field.selectionStart, field.selectionEnd))
@@ -461,11 +598,30 @@ class InputInjector(
         }
     }
 
+    /** Ends editing in the focused view, a web page's field included, and hides the software keyboard. */
+    @ReactMethod
+    fun dismissKeyboard(promise: Promise) {
+        UiThreadUtil.runOnUiThread {
+            try {
+                val focused = rootViews().asReversed().firstNotNullOfOrNull { it.findFocus() }
+                if (focused is WebView) focused.evaluateJavascript(WebContent.BLUR, null)
+                val token = (focused ?: reactContext.currentActivity?.window?.decorView)?.windowToken
+                val keyboard = reactContext.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                if (token != null) keyboard.hideSoftInputFromWindow(token, 0)
+                focused?.clearFocus()
+                promise.resolve(null)
+            } catch (e: Exception) {
+                promise.reject("ERR_KEYBOARD", e.message, e)
+            }
+        }
+    }
+
     companion object {
         private const val TAP_HOLD_MS = 60L
         private const val MOVE_STEP_MS = 16L
         private const val MAX_ELEMENTS = 600
         private const val MAX_VIEWS = 1500
         private const val MAX_VIEW_TEXT = 500
+        private const val WEB_SNAPSHOT_TIMEOUT_MS = 1500L
     }
 }

@@ -8,6 +8,7 @@ type InputInjectorModule = {
   elementsAndViews: () => Promise<ElementsSnapshot>;
   typeText: (text: string) => Promise<unknown>;
   deleteBackward: (count: number) => Promise<unknown>;
+  dismissKeyboard: () => Promise<unknown>;
   fingerprint: () => Promise<string>;
 };
 
@@ -41,5 +42,8 @@ export const nativeInput = {
   },
   deleteBackward: async (count: number) => {
     await injector().deleteBackward(count);
+  },
+  dismissKeyboard: async () => {
+    await injector().dismissKeyboard();
   },
 };

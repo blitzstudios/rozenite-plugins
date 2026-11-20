@@ -40,7 +40,9 @@ RZ_PORT=8082 rz …                    # another Metro
 2. **Act and read the reply.** `tap-element` and `long-press` take a ref, test id or label. They and `tap`,
    `swipe`, `scroll` and `type-text` wait for the screen to settle and return what changed (`+` appeared, `-`
    gone, `~` new value or state), so a separate look is rarely needed. Don't `sleep` after a touch. `type-text`
-   goes to the focused field (tap it first); `backspaces` deletes first, and `"\n"` presses return. Tap by ref
+   goes to the focused field (tap it first); `backspaces` deletes first, and `"\n"` presses return. A field that
+   moves focus as you type (a segmented date or code box) needs `keystrokes: true`, one character at a time.
+   `dismiss-keyboard` ends editing when the keyboard covers what you want to tap. Tap by ref
    rather than coordinates: a chip bar scrolls when a chip is selected, and a ref follows its element.
    `wait-for-element` is for things that load after the screen settles.
 3. **Screenshot only to check how something looks,** or when the header says the app isn't `active`:
@@ -69,5 +71,11 @@ replay starts only on the screen the recording started on (`force` skips the che
 - **System alerts** (permissions, "Open in …?") belong to the OS; only the user can answer them. The Input tools
   still reach the app underneath.
 - **A finger's touches inside an RN `<Modal>`** aren't recorded; what the tools send always is.
+- **Web views** (Android): a page's fields, buttons, links, labels and headings are listed like native ones,
+  with `#` the element's id, and `type-text` types into a focused web field through the page. A frame from
+  another site can't be read and shows as one `Frame from another site` line. On iOS only taps and typing reach a
+  page; its contents aren't listed yet.
+- **Several apps on one Metro** (a simulator and a phone): `rz devices` lists them, and `RZ_DEVICE=<name, app id
+  or android/ios>` picks one. Without it, `rz` takes the first and warns.
 - **An installed iOS app keeps the Metro it last loaded from.** To point it at another, set `RCT_jsLocation` to
   `127.0.0.1:<port>` in the app's preferences plist on the simulator and relaunch.
