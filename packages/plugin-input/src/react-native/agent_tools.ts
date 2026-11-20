@@ -43,6 +43,8 @@ const SETTLE_MAX_MS = 10000;
 /** How long the screen must stay as it was before a touch to count as "no change". */
 const NO_CHANGE_MS = 700;
 const SCROLL_FRACTION = 0.6;
+/** Between keystrokes, so a field that moves focus as it fills has moved it before the next one. */
+const KEYSTROKE_GAP_MS = 60;
 const REF = /^e\d+$/;
 
 const requiredNum = (value: unknown, name: string) => {
@@ -419,7 +421,7 @@ export function inputAgentTools(ops: InputOperations): AgentToolEntry[] {
       tool: {
         name: 'type-text',
         description:
-          'Types text into the focused text field, at its cursor, and returns what changed. Tap the field first (tap-element) to focus it. "\\n" is the return key, which submits a single-line field.',
+          'Types text into the focused text field, at its cursor, and returns what changed. Tap the field first (tap-element) to focus it. "\\n" is the return key, which submits a single-line field. Fields in a web view take text too.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -427,6 +429,11 @@ export function inputAgentTools(ops: InputOperations): AgentToolEntry[] {
             backspaces: {
               type: 'number',
               description: 'Press delete this many times before typing: a selection goes first, then the characters before the cursor.',
+            },
+            keystrokes: {
+              type: 'boolean',
+              description:
+                'Type one character at a time, each into whichever field is focused then, for fields that move focus as they fill (a code split across boxes, a date as month / day / year) or that cap their length per keystroke.',
             },
             ...OBSERVE,
           },
@@ -440,9 +447,27 @@ export function inputAgentTools(ops: InputOperations): AgentToolEntry[] {
         const did = [backspaces ? `deleted ${backspaces}` : '', text ? `typed ${JSON.stringify(text)}` : ''].filter(Boolean).join(', then ');
         return act(args, did, async () => {
           if (backspaces) await ops.deleteBackward(backspaces, 'agent');
-          if (text) await ops.typeText(text, 'agent');
+          if (!text) return;
+          if (args.keystrokes !== true) {
+            await ops.typeText(text, 'agent');
+            return;
+          }
+          for (const character of text) {
+            await ops.typeText(character, 'agent');
+            await new Promise((resolve) => setTimeout(resolve, KEYSTROKE_GAP_MS));
+          }
         });
       },
+    },
+    {
+      tool: {
+        name: 'dismiss-keyboard',
+        description:
+          'Ends editing in the focused field, a web view\'s included, so the software keyboard goes away, and returns what changed. Use it when the keyboard covers what you want to tap next.',
+        inputSchema: { type: 'object', properties: { ...OBSERVE } },
+        destructive: true,
+      },
+      handler: async (args) => act(args, 'dismissed the keyboard', () => ops.dismissKeyboard('agent')),
     },
     {
       tool: {

@@ -62,7 +62,7 @@ export type ElementsSnapshot = { elements: ScreenElement[]; truncated: boolean; 
 export type InputSource = 'panel' | 'agent' | 'replay';
 
 /** One input the app was sent, newest last in `InputState.log`. */
-export type InputLogEntry = { id: number; at: number; source: InputSource; kind: 'tap' | 'long press' | 'swipe' | 'type' | 'delete'; detail: string; error?: string };
+export type InputLogEntry = { id: number; at: number; source: InputSource; kind: 'tap' | 'long press' | 'swipe' | 'type' | 'delete' | 'dismiss keyboard'; detail: string; error?: string };
 
 export type RecordingSummary = { fileName: string; name: string; createdAt: string; eventCount: number };
 

@@ -144,6 +144,19 @@ internal object WebContent {
         })(${JSONObject.quote(text)})
     """.trimIndent()
 
+    /** Takes focus from the page's focused field, through same-origin frames, so the page doesn't show the keyboard again. */
+    val BLUR = """
+        (function () {
+          var doc = document, el = doc.activeElement;
+          while (el && (el.tagName === 'IFRAME' || el.tagName === 'FRAME')) {
+            try { doc = el.contentDocument; } catch (e) { doc = null; }
+            if (!doc) break;
+            el = doc.activeElement;
+          }
+          if (el && el.blur) el.blur();
+        })()
+    """.trimIndent()
+
     /** The delete key, `count` times, in the page's focused field. Answers like `type`. */
     fun delete(count: Int) = """
         (function (count) {

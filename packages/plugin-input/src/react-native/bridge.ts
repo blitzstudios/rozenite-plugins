@@ -80,6 +80,8 @@ export type InputOperations = {
   typeText: (text: string, source: InputSource) => Promise<void>;
   /** The delete key, `count` times. */
   deleteBackward: (count: number, source: InputSource) => Promise<void>;
+  /** Ends editing in the focused field, a web page's included, so the keyboard goes away. */
+  dismissKeyboard: (source: InputSource) => Promise<void>;
   startRecording: () => void;
   stopRecording: (name?: string) => Promise<RecordingSummary | null>;
   play: (fileName: string, options?: PlayOptions) => Promise<{ finished: Promise<void> }>;
@@ -187,6 +189,7 @@ export function startInputBridge(client: RozeniteDevToolsClient<InputEventMap>):
     typeText: (text, source) =>
       logged(source, 'type', text === '\n' ? 'return' : JSON.stringify(text.length > 40 ? `${text.slice(0, 40)}…` : text), () => nativeInput.typeText(text)),
     deleteBackward: (count, source) => logged(source, 'delete', `×${count}`, () => nativeInput.deleteBackward(count)),
+    dismissKeyboard: (source) => logged(source, 'dismiss keyboard', '', () => nativeInput.dismissKeyboard()),
     startRecording: () => tapRecorder.start(),
     stopRecording: async (name) => {
       const summary = await tapRecorder.stop(name);

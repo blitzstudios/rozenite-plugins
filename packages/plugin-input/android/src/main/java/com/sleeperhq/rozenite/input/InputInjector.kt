@@ -1,6 +1,7 @@
 package com.sleeperhq.rozenite.input
 
 import android.app.Instrumentation
+import android.content.Context
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
@@ -19,6 +20,7 @@ import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebView
 import android.widget.EditText
 import android.widget.TextView
@@ -593,6 +595,24 @@ class InputInjector(
                 remaining -= 1
             }
             if (remaining > 0 && start > 0) field.text.delete(max(0, start - remaining), start)
+        }
+    }
+
+    /** Ends editing in the focused view, a web page's field included, and hides the software keyboard. */
+    @ReactMethod
+    fun dismissKeyboard(promise: Promise) {
+        UiThreadUtil.runOnUiThread {
+            try {
+                val focused = rootViews().asReversed().firstNotNullOfOrNull { it.findFocus() }
+                if (focused is WebView) focused.evaluateJavascript(WebContent.BLUR, null)
+                val token = (focused ?: reactContext.currentActivity?.window?.decorView)?.windowToken
+                val keyboard = reactContext.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                if (token != null) keyboard.hideSoftInputFromWindow(token, 0)
+                focused?.clearFocus()
+                promise.resolve(null)
+            } catch (e: Exception) {
+                promise.reject("ERR_KEYBOARD", e.message, e)
+            }
         }
     }
 

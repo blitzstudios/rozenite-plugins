@@ -711,6 +711,18 @@ RCT_EXPORT_METHOD(deleteBackward
   resolve(@{@"view" : NSStringFromClass(input.class)});
 }
 
+// Ends editing in whichever view is first responder, a web view's content included, so the keyboard goes away.
+RCT_EXPORT_METHOD(dismissKeyboard
+                  : (RCTPromiseResolveBlock)resolve rejecter
+                  : (RCTPromiseRejectBlock)reject)
+{
+  [[UIApplication sharedApplication] sendAction:@selector(resignFirstResponder) to:nil from:nil forEvent:nil];
+  for (UIWindow *window in [self visibleWindows]) {
+    [window endEditing:YES];
+  }
+  resolve(nil);
+}
+
 @end
 
 #endif
