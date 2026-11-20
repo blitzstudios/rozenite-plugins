@@ -69,5 +69,9 @@ replay starts only on the screen the recording started on (`force` skips the che
 - **System alerts** (permissions, "Open in …?") belong to the OS; only the user can answer them. The Input tools
   still reach the app underneath.
 - **A finger's touches inside an RN `<Modal>`** aren't recorded; what the tools send always is.
+- **Web views** (Android): a page's fields, buttons, links, labels and headings are listed like native ones,
+  with `#` the element's id, and `type-text` types into a focused web field through the page. A frame from
+  another site can't be read and shows as one `Frame from another site` line. On iOS only taps and typing reach a
+  page; its contents aren't listed yet.
 - **An installed iOS app keeps the Metro it last loaded from.** To point it at another, set `RCT_jsLocation` to
   `127.0.0.1:<port>` in the app's preferences plist on the simulator and relaunch.
